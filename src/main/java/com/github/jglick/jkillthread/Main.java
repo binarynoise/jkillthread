@@ -36,7 +36,7 @@ public class Main {
             System.err.println("  java -jar jkillthread.jar <PID> <TID>");
             System.err.println("    where <PID> is as in jps, or some substring of the text after a PID visible in jps -lm");
             System.err.println("    and <TID> is a thread name (like pool-9-thread-1), or substring (like pool-)");
-            System.err.println("Requires JDK 6+ for both this tool and the target VM.");
+            System.err.println("Requires the JDK for this tool and the target VM to be roughly the same.");
             System.exit(2);
         }
         String vmid = args[0];
