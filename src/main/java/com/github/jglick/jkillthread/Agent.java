@@ -16,17 +16,44 @@
 
 package com.github.jglick.jkillthread;
 
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.PrintWriter;
+
 public class Agent {
 
-    @SuppressWarnings("deprecation") // yeah, yeah, we know, “prone to deadlocks blah blah blah”
-    public static void agentmain(String tid) {
+    public static void agentmain(String agentArgs) throws Exception {
+        String[] splits = agentArgs.split("\\|");
+        String tid = splits[0];
+        String outFile = splits[1];
+
+        try (PrintWriter out = new PrintWriter(new FileOutputStream(outFile))) {
+            ProcessHandle handle = ProcessHandle.current();
+            out.printf("Agent loaded  in %d %s%n", handle.pid(), handle.info().command().orElse(null));
+            try {
+                killThread(tid, out);
+            } catch (Exception e) {
+                e.printStackTrace();
+                try (PrintWriter pw = new PrintWriter(new FileWriter(outFile))) {
+                    e.printStackTrace(pw);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    e.addSuppressed(ex);
+                }
+                throw e;
+            }
+            out.println("Agent done.");
+        }
+    }
+
+    private static void killThread(String tid, PrintWriter out) {
         ThreadGroup g = Thread.currentThread().getThreadGroup();
         while (true) {
-            ThreadGroup g2 = g.getParent();
-            if (g2 == null) {
+            ThreadGroup p = g.getParent();
+            if (p == null) {
                 break;
             } else {
-                g = g2;
+                g = p;
             }
         }
         Thread[] threads;
@@ -46,16 +73,14 @@ public class Agent {
             }
             String name = thread.getName();
             if (name.contains(tid)) {
-                System.err.printf("Killing \"%s\"%n", name);
+                out.printf("Killing \"%s\"%n", name);
                 found = true;
-                thread.stop();
+                thread.interrupt();
+                out.printf("Killed \"%s\"%n", name);
             }
         }
         if (!found) {
-            System.err.printf("Did not find \"%s\"%n", tid);
+            out.printf("Did not find \"%s\"%n", tid);
         }
     }
-
-    private Agent() {}
-
 }

@@ -13,3 +13,9 @@ tasks.withType<Jar> {
         attributes["Agent-Class"] = "com.github.jglick.jkillthread.Agent"
     }
 }
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(11))
+    }
+}

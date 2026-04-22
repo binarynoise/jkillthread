@@ -16,17 +16,17 @@
 
 package com.github.jglick.jkillthread;
 
-import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
+
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketException;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class Main {
 
@@ -40,32 +40,42 @@ public class Main {
             System.exit(2);
         }
         String vmid = args[0];
+        String tid = args[1];
         File self = new File(URI.create(Main.class.getProtectionDomain().getCodeSource().getLocation().toExternalForm()));
-        VirtualMachine m;
-        try {
-            m = VirtualMachine.attach(vmid);
-        } catch (AttachNotSupportedException e) {
-            VirtualMachineDescriptor match = null;
-            for (VirtualMachineDescriptor desc : VirtualMachine.list()) {
-                if (desc.displayName().contains("jkillthread")) {
-                    continue;
-                }
-                if (desc.displayName().contains(vmid)) {
-                    if (match != null) {
-                        System.err.println("Multiple Java processes found matching '" + vmid + "'");
-                        System.exit(1);
-                    } else {
-                        match = desc;
-                    }
-                }
-            }
-            if (match == null) {
-                System.err.println("No Java processes found matching '" + vmid + "'");
-                System.exit(1);
-            }
-            m = VirtualMachine.attach(match);
+        File outFile = File.createTempFile("jkillthread-out-", ".txt");
+        outFile.deleteOnExit();
+
+        List<VirtualMachineDescriptor> matches = VirtualMachine.list().stream()
+                .filter(desc -> !desc.displayName().contains("jkillthread"))
+                .filter(desc -> desc.displayName().contains(vmid) || vmid.equals(desc.id()))
+                .collect(Collectors.toList());
+        if (matches.isEmpty()) {
+            System.err.println("No Java processes found matching '" + vmid + "'");
+            System.exit(1);
         }
-        m.loadAgent(self.getAbsolutePath(), args[1]);
+        for (VirtualMachineDescriptor match : matches) {
+            VirtualMachine m = VirtualMachine.attach(match);
+            try {
+                String agentArgs = tid + "|" + outFile.getAbsolutePath();
+                System.out.printf("Agent loading in %s %s%n", match.id(), match.displayName());
+                m.loadAgent(self.getAbsolutePath(), agentArgs);
+                printOutput(outFile);
+            } catch (Exception ex) {
+                System.err.printf("Failed to attach to %s %s%n", match.id(), match.displayName());
+                ex.printStackTrace();
+                System.err.println();
+            } finally {
+                m.detach();
+            }
+        }
     }
 
+    private static void printOutput(File outFile) throws IOException {
+        Path errorFilePath = outFile.toPath();
+        if (outFile.length() > 0) {
+            String errorContent = Files.readString(errorFilePath);
+            System.out.print(errorContent);
+            Files.newOutputStream(errorFilePath, StandardOpenOption.TRUNCATE_EXISTING).close();
+        }
+    }
 }
